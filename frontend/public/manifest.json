@@ -1,0 +1,20 @@
+{
+  "name": "Innowell Attendance",
+  "short_name": "Attendance",
+  "start_url": "/employee",
+  "display": "standalone",
+  "background_color": "#f4f4f0",
+  "theme_color": "#185FA5",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

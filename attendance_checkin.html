@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Attendance Check-In</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f4f4f0;
+      color: #1a1a18;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .wrap { width: 100%; max-width: 480px; }
+    h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; }
+    .sub { font-size: 13px; color: #666; margin-bottom: 1.5rem; }
+
+    .card {
+      background: #fff;
+      border: 0.5px solid rgba(0,0,0,0.12);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .field { margin-bottom: 1rem; }
+    label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; }
+
+    input[type="text"], select {
+      width: 100%; height: 36px; padding: 0 10px;
+      border: 0.5px solid rgba(0,0,0,0.2);
+      border-radius: 8px; font-size: 14px;
+      font-family: inherit; background: #fff;
+      color: #1a1a18; outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus, select:focus {
+      border-color: rgba(0,0,0,0.4);
+      box-shadow: 0 0 0 3px rgba(0,0,0,0.06);
+    }
+
+    .map-wrapper {
+      border-radius: 8px; overflow: hidden;
+      border: 0.5px solid rgba(0,0,0,0.15);
+      position: relative;
+    }
+    #mapPicker { height: 220px; width: 100%; }
+
+    .map-hint {
+      position: absolute;
+      top: 8px; left: 50%; transform: translateX(-50%);
+      background: rgba(255,255,255,0.93);
+      border: 0.5px solid rgba(0,0,0,0.1);
+      border-radius: 20px; padding: 4px 12px;
+      font-size: 12px; color: #555;
+      pointer-events: none; white-space: nowrap;
+      z-index: 500; transition: opacity 0.3s;
+    }
+    .map-hint.hidden { opacity: 0; }
+
+    .loc-actions {
+      display: flex; align-items: center;
+      gap: 8px; margin-top: 8px;
+    }
+    .btn-detect {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 500; color: #185FA5;
+      background: #EAF2FB; border: 0.5px solid rgba(24,95,165,0.25);
+      border-radius: 20px; padding: 5px 14px;
+      cursor: pointer; font-family: inherit;
+      transition: background 0.15s;
+    }
+    .btn-detect:hover:not(:disabled) { background: #d5e8f7; }
+    .btn-detect:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .geo-box {
+      background: #f4f4f0;
+      border: 0.5px solid rgba(0,0,0,0.12);
+      border-radius: 8px; padding: 10px 14px;
+      display: flex; align-items: flex-start;
+      gap: 10px; margin-top: 8px;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      flex-shrink: 0; margin-top: 5px;
+    }
+    .dot-idle    { background: #bbb; }
+    .dot-loading { background: #EF9F27; animation: pulse 1s infinite; }
+    .dot-ok      { background: #1D9E75; }
+    .dot-err     { background: #E24B4A; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+    .geo-text { flex: 1; min-width: 0; }
+    .geo-label   { font-size: 13px; font-weight: 500; color: #1a1a18; }
+    .geo-coords  { font-size: 11px; color: #888; margin-top: 2px; font-family: monospace; }
+    .geo-address { font-size: 12px; color: #444; margin-top: 4px; line-height: 1.5; }
+
+    .shimmer {
+      display: inline-block; height: 12px; width: 200px;
+      background: linear-gradient(90deg,#e8e8e8 25%,#d0d0d0 50%,#e8e8e8 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s infinite; border-radius: 4px;
+    }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    .branch-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 500;
+      padding: 3px 8px; border-radius: 20px; margin-top: 5px;
+    }
+    .badge-near { background: #EAF3DE; color: #3B6D11; }
+    .badge-far  { background: #FAECE7; color: #993C1D; }
+    .badge-dot  { width: 6px; height: 6px; border-radius: 50%; }
+    .badge-near .badge-dot { background: #1D9E75; }
+    .badge-far  .badge-dot { background: #D85A30; }
+
+    .err-msg { font-size: 12px; color: #A32D2D; margin-top: 6px; display: none; }
+
+    .submit-btn {
+      width: 100%; padding: 11px; border-radius: 8px;
+      border: 0.5px solid rgba(0,0,0,0.2);
+      background: #fff; font-size: 15px; font-weight: 500;
+      font-family: inherit; color: #1a1a18;
+      cursor: pointer; margin-top: 1rem;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .submit-btn:hover:not(:disabled) { background: #f4f4f0; }
+    .submit-btn:active:not(:disabled) { transform: scale(0.99); }
+    .submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .submit-btn.done { background: #EAF3DE; color: #3B6D11; border-color: #97C459; }
+
+    .log-title {
+      font-size: 11px; font-weight: 500; color: #888;
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;
+    }
+    .log-empty { font-size: 13px; color: #aaa; padding: 10px 0; }
+    .log-row {
+      display: flex; align-items: flex-start;
+      gap: 10px; padding: 10px 0;
+      border-top: 0.5px solid rgba(0,0,0,0.08);
+    }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: #E6F1FB; display: flex; align-items: center;
+      justify-content: center; font-size: 12px; font-weight: 500;
+      color: #185FA5; flex-shrink: 0;
+    }
+    .log-name { font-size: 14px; font-weight: 500; }
+    .log-dept { font-size: 12px; color: #888; margin-top: 1px; }
+    .log-addr { font-size: 12px; color: #555; margin-top: 3px; line-height: 1.4; }
+    .log-time { margin-left: auto; font-size: 12px; color: #aaa; white-space: nowrap; font-family: monospace; padding-top: 2px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Attendance check-in</h1>
+    <p class="sub">Enter your details, then set your location below.</p>
+
+    <div class="field">
+      <label for="nameInput">Full name</label>
+      <input type="text" id="nameInput" placeholder="e.g. Aditya M S" />
+    </div>
+
+    <div class="field">
+      <label for="deptSelect">Team / Department</label>
+      <select id="deptSelect">
+        <option value="">Select a team…</option>
+        <option>Engineering</option>
+        <option>Design</option>
+        <option>Marketing</option>
+        <option>Sales</option>
+        <option>Operations</option>
+        <option>HR</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Location</label>
+
+      <div class="map-wrapper">
+        <div id="mapPicker"></div>
+        <div class="map-hint" id="mapHint">📍 Click anywhere on the map to pin location</div>
+      </div>
+
+      <div class="loc-actions">
+        <button class="btn-detect" id="detectBtn" onclick="autoDetect()">
+          ⊕ Auto-detect my location
+        </button>
+        <span style="font-size:11px;color:#aaa">or click the map</span>
+      </div>
+
+      <div class="geo-box">
+        <span class="status-dot dot-idle" id="statusDot"></span>
+        <div class="geo-text">
+          <div class="geo-label" id="geoLabel">No location selected</div>
+          <div class="geo-coords" id="geoCoords"></div>
+          <div class="geo-address" id="geoAddress"></div>
+          <div id="geoBranch"></div>
+        </div>
+      </div>
+
+      <p class="err-msg" id="geoErr"></p>
+    </div>
+
+    <button class="submit-btn" id="submitBtn" onclick="submitCheckin()" disabled>
+      Check in
+    </button>
+  </div>
+
+  <div>
+    <p class="log-title">Today's check-ins</p>
+    <p class="log-empty" id="logEmpty">No check-ins yet.</p>
+    <div id="logList"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ─────────────────────────────────────────────────────
+//  CONFIG
+// ─────────────────────────────────────────────────────
+const BRANCHES = [
+  { name: 'Innowell – Chennai',     lat: 13.0536522, lng: 80.1660282 },
+  { name: 'Innowell – Rajapalayam', lat: 9.432248,   lng: 77.7471651 }
+];
+const GEOFENCE_M = 500;
+
+// ─────────────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────────────
+let geoData   = null;
+let mapMarker = null;
+const checkins = [];
+
+// ─────────────────────────────────────────────────────
+//  MAP SETUP
+// ─────────────────────────────────────────────────────
+const map = L.map('mapPicker', { zoomControl: true })
+             .setView([13.0536522, 80.1660282], 13);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors',
+  maxZoom: 19
+}).addTo(map);
+
+// Office markers
+const officeIcon = L.divIcon({
+  html: '<div style="background:#185FA5;width:12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>',
+  iconSize: [12,12], iconAnchor: [6,6], className: ''
+});
+BRANCHES.forEach(b =>
+  L.marker([b.lat, b.lng], { icon: officeIcon })
+   .addTo(map)
+   .bindPopup(`<b>${b.name}</b>`)
+);
+
+// Map click → pin location
+map.on('click', e => {
+  hideErr();
+  placePin(e.latlng.lat, e.latlng.lng);
+  fetchAddress(e.latlng.lat, e.latlng.lng);
+});
+
+// ─────────────────────────────────────────────────────
+//  CONFIG — Google Maps API Key
+// ─────────────────────────────────────────────────────
+const GOOGLE_API_KEY = 'AIzaSyA2h9iBVXGEOUsl8V6si5BP61f7UrYBs8s';
+
+// ─────────────────────────────────────────────────────
+//  AUTO-DETECT — uses browser Geolocation (proper HTTPS)
+//  with Google Geocoding API for address lookup
+// ─────────────────────────────────────────────────────
+function autoDetect() {
+  const btn = document.getElementById('detectBtn');
+  btn.disabled = true;
+  btn.textContent = '↻ Detecting…';
+  setStatus('loading', 'Requesting location…');
+  hideErr();
+  geoData = null;
+  checkReady();
+
+  if (!navigator.geolocation) {
+    setStatus('err', 'Not supported');
+    showErr('Geolocation is not supported by your browser. Please click the map instead.');
+    btn.disabled = false;
+    btn.textContent = '⊕ Auto-detect my location';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      map.setView([lat, lng], 16);
+      placePin(lat, lng);
+      document.getElementById('mapHint').classList.add('hidden');
+      document.getElementById('geoCoords').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}  ±${Math.round(pos.coords.accuracy)}m`;
+      await fetchAddress(lat, lng);
+      btn.disabled = false;
+      btn.textContent = '⊕ Auto-detect my location';
+    },
+    (err) => {
+      setStatus('err', 'Detection failed');
+      const msgs = {
+        1: 'Location permission denied. Please allow location access in your browser settings.',
+        2: 'Position unavailable. Try clicking the map instead.',
+        3: 'Request timed out. Try clicking the map instead.'
+      };
+      showErr(msgs[err.code] || 'Could not detect location. Click the map to set manually.');
+      btn.disabled = false;
+      btn.textContent = '⊕ Auto-detect my location';
+      geoData = null;
+      checkReady();
+    },
+    { timeout: 10000, maximumAge: 60000, enableHighAccuracy: true }
+  );
+}
+
+// ─────────────────────────────────────────────────────
+//  MAP CLICK → reverse geocode via Nominatim
+// ─────────────────────────────────────────────────────
+async function fetchAddress(lat, lng) {
+  if (!document.getElementById('geoCoords').textContent) {
+    document.getElementById('geoCoords').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  }
+  document.getElementById('geoAddress').innerHTML = '<span class="shimmer"></span>';
+  document.getElementById('geoBranch').innerHTML = '';
+  setStatus('loading', 'Fetching address…');
+  geoData = null;
+  checkReady();
+
+  let address = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+  try {
+    // Google Geocoding API — reverse geocode lat/lng to address
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_API_KEY}`;
+    const res  = await fetch(url);
+    const json = await res.json();
+
+    if (json.status === 'OK' && json.results.length > 0) {
+      // Use formatted_address from first result
+      address = json.results[0].formatted_address;
+    } else {
+      // Fallback: try Nominatim if Google fails
+      const nom = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`, {
+        headers: { 'Accept-Language': 'en', 'User-Agent': 'AttendanceApp/1.0' }
+      });
+      const nomJson = await nom.json();
+      if (nomJson.display_name) address = nomJson.display_name;
+    }
+  } catch (err) {
+    // Silent fallback to coordinates
+    console.warn('Geocoding failed:', err.message);
+  }
+
+  document.getElementById('geoAddress').textContent = '📍 ' + address;
+  setStatus('ok', 'Location set');
+  showBranch(lat, lng);
+  geoData = { lat, lng, address };
+  checkReady();
+}
+
+// ─────────────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────────────
+function placePin(lat, lng) {
+  document.getElementById('mapHint').classList.add('hidden');
+  if (mapMarker) {
+    mapMarker.setLatLng([lat, lng]);
+  } else {
+    mapMarker = L.marker([lat, lng], { draggable: true }).addTo(map);
+    mapMarker.on('dragend', () => {
+      const pos = mapMarker.getLatLng();
+      fetchAddress(pos.lat, pos.lng);
+    });
+  }
+}
+
+function showBranch(lat, lng) {
+  let nearest = null, minDist = Infinity;
+  for (const b of BRANCHES) {
+    const d = haversine(lat, lng, b.lat, b.lng);
+    if (d < minDist) { minDist = d; nearest = b; }
+  }
+  const near = minDist <= GEOFENCE_M;
+  document.getElementById('geoBranch').innerHTML = `
+    <span class="branch-badge ${near ? 'badge-near' : 'badge-far'}">
+      <span class="badge-dot"></span>
+      ${near ? `Near ${nearest.name} (${Math.round(minDist)}m)` : `${Math.round(minDist)}m from ${nearest.name}`}
+    </span>`;
+}
+
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000, r = Math.PI / 180;
+  const a = Math.sin((lat2-lat1)*r/2)**2 +
+            Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin((lng2-lng1)*r/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function setStatus(state, label) {
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot ' + (state === 'ok' ? 'dot-ok' : state === 'loading' ? 'dot-loading' : 'dot-err');
+  document.getElementById('geoLabel').textContent = label;
+}
+
+function showErr(msg) {
+  const el = document.getElementById('geoErr');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideErr() {
+  document.getElementById('geoErr').style.display = 'none';
+}
+
+function checkReady() {
+  const name = document.getElementById('nameInput').value.trim();
+  const dept = document.getElementById('deptSelect').value;
+  document.getElementById('submitBtn').disabled = !(name && dept && geoData);
+}
+
+document.getElementById('nameInput').addEventListener('input', checkReady);
+document.getElementById('deptSelect').addEventListener('change', checkReady);
+
+// ─────────────────────────────────────────────────────
+//  SUBMIT
+// ─────────────────────────────────────────────────────
+function submitCheckin() {
+  const name = document.getElementById('nameInput').value.trim();
+  const dept = document.getElementById('deptSelect').value;
+  if (!name || !dept || !geoData) return;
+
+  checkins.unshift({ name, dept, ...geoData, time: new Date() });
+  renderLog();
+
+  const btn = document.getElementById('submitBtn');
+  btn.textContent = 'Checked in ✓';
+  btn.classList.add('done');
+  btn.disabled = true;
+
+  // Reset form
+  document.getElementById('nameInput').value  = '';
+  document.getElementById('deptSelect').value = '';
+  setStatus('idle', 'No location selected');
+  document.getElementById('geoCoords').textContent  = '';
+  document.getElementById('geoAddress').textContent = '';
+  document.getElementById('geoBranch').innerHTML    = '';
+  hideErr();
+
+  if (mapMarker) { map.removeLayer(mapMarker); mapMarker = null; }
+  document.getElementById('mapHint').classList.remove('hidden');
+  geoData = null;
+
+  setTimeout(() => {
+    btn.textContent = 'Check in';
+    btn.classList.remove('done');
+    btn.disabled = true;
+  }, 2500);
+}
+
+function renderLog() {
+  document.getElementById('logEmpty').style.display = checkins.length ? 'none' : 'block';
+  document.getElementById('logList').innerHTML = checkins.map(c => `
+    <div class="log-row">
+      <div class="avatar">${c.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</div>
+      <div style="flex:1;min-width:0">
+        <div class="log-name">${c.name}</div>
+        <div class="log-dept">${c.dept}</div>
+        <div class="log-addr">${c.address}</div>
+      </div>
+      <div class="log-time">${c.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+    </div>
+  `).join('');
+}
+</script>
+</body>
+</html>
