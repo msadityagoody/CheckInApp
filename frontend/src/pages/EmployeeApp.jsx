@@ -3,7 +3,7 @@ import axios from 'axios';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = 'https://checkinapp-wut1.onrender.com/api';
 const GOOGLE_API_KEY = 'AIzaSyA2h9iBVXGEOUsl8V6si5BP61f7UrYBs8s';
 
 const OFFICE_LOCATIONS = [

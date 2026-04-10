@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = 'https://checkinapp-wut1.onrender.com/api';
 
 const EMPTY_SUMMARY = {
   total_employees: 0,

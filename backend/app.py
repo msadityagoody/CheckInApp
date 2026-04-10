@@ -9,7 +9,9 @@ from models import db
 # Load environment variables
 load_dotenv()
 
+
 app = Flask(__name__)
+CORS(app, origins="*", supports_credentials=True)
 
 # Configure app from .env
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
@@ -19,7 +21,6 @@ app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
 # Initialize extensions
 db.init_app(app)
 JWTManager(app)
-CORS(app)
 
 # Import and register blueprints
 from routes.auth import auth_bp
