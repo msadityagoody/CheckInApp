@@ -54,6 +54,17 @@ function AdminDashboard() {
     department: ''
   });
 
+  // Create Employee Form State
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    department: '',
+    role: 'employee'
+  });
+  const [formStatus, setFormStatus] = useState({ type: '', message: '' });
+  const [formLoading, setFormLoading] = useState(false);
+
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
     const rawUser = localStorage.getItem('user');
@@ -142,6 +153,37 @@ function AdminDashboard() {
     window.location.href = '/employee';
   };
 
+  const handleCreateEmployee = async (e) => {
+    e.preventDefault();
+    setFormLoading(true);
+    setFormStatus({ type: '', message: '' });
+
+    try {
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      await axios.post(`${API_BASE}/auth/register`, formData, config);
+      
+      setFormStatus({ type: 'success', message: 'Employee created!' });
+      setFormData({
+        name: '',
+        email: '',
+        password: '',
+        department: '',
+        role: 'employee'
+      });
+      
+      // Refresh dashboard data to reflect new employee in total count if applicable
+      const summaryResponse = await axios.get(`${API_BASE}/admin/summary`, config);
+      setSummary({ ...EMPTY_SUMMARY, ...(summaryResponse.data || {}) });
+    } catch (err) {
+      setFormStatus({ 
+        type: 'error', 
+        message: err.response?.data?.message || 'Failed to create employee.' 
+      });
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
   const exportCsv = () => {
     const headers = ['Name', 'Department', 'Date', 'Check In', 'Check Out', 'Duration', 'Status'];
 
@@ -213,6 +255,15 @@ function AdminDashboard() {
           >
             Records
           </button>
+          <button
+            onClick={() => setActiveTab('create')}
+            style={{
+              ...styles.tabButton,
+              ...(activeTab === 'create' ? styles.tabButtonActive : null)
+            }}
+          >
+            Create Employee
+          </button>
         </div>
 
         {loading && <div style={styles.loading}>Loading admin dashboard...</div>}
@@ -226,6 +277,93 @@ function AdminDashboard() {
                 <div style={styles.summaryValue}>{card.value}</div>
               </article>
             ))}
+          </section>
+        )}
+
+        {!loading && !error && activeTab === 'create' && (
+          <section style={styles.formContainer}>
+            <h2 style={styles.sectionTitle}>Add New Employee</h2>
+            <form onSubmit={handleCreateEmployee} style={styles.form}>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Full Name</label>
+                <input
+                  required
+                  style={styles.formControl}
+                  type="text"
+                  placeholder="Employee Name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Email Address</label>
+                <input
+                  required
+                  style={styles.formControl}
+                  type="email"
+                  placeholder="email@example.com"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                />
+              </div>
+
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Password</label>
+                <input
+                  required
+                  style={styles.formControl}
+                  type="password"
+                  placeholder="********"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                />
+              </div>
+
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Department</label>
+                <input
+                  required
+                  style={styles.formControl}
+                  type="text"
+                  placeholder="e.g. Engineering, HR"
+                  value={formData.department}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                />
+              </div>
+
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Role</label>
+                <select
+                  style={styles.formControl}
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                >
+                  <option value="employee">Employee</option>
+                  <option value="admin">Administrator</option>
+                </select>
+              </div>
+
+              <button
+                disabled={formLoading}
+                type="submit"
+                style={{
+                  ...styles.submitButton,
+                  ...(formLoading ? styles.buttonDisabled : null)
+                }}
+              >
+                {formLoading ? 'Creating...' : 'Create Employee'}
+              </button>
+
+              {formStatus.message && (
+                <div style={{
+                  ...styles.formMessage,
+                  ...(formStatus.type === 'success' ? styles.formSuccess : styles.formError)
+                }}>
+                  {formStatus.message}
+                </div>
+              )}
+            </form>
           </section>
         )}
 
@@ -500,6 +638,75 @@ const styles = {
     color: '#166534',
     fontSize: '11px',
     fontWeight: 700
+  },
+  formContainer: {
+    backgroundColor: '#ffffff',
+    border: '1px solid #e7e9ee',
+    borderRadius: '12px',
+    padding: '24px',
+    maxWidth: '500px'
+  },
+  sectionTitle: {
+    fontSize: '18px',
+    fontWeight: 700,
+    color: '#0f172a',
+    margin: '0 0 20px 0'
+  },
+  form: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  inputGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
+  },
+  label: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: '#4b5563'
+  },
+  formControl: {
+    height: '40px',
+    border: '1px solid #d6deea',
+    borderRadius: '8px',
+    padding: '0 12px',
+    fontSize: '14px',
+    color: '#1f2937'
+  },
+  submitButton: {
+    height: '42px',
+    backgroundColor: '#1d4ed8',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    marginTop: '10px',
+    transition: 'background-color 0.2s'
+  },
+  buttonDisabled: {
+    backgroundColor: '#93c5fd',
+    cursor: 'not-allowed'
+  },
+  formMessage: {
+    padding: '10px 14px',
+    borderRadius: '8px',
+    fontSize: '13px',
+    marginTop: '12px',
+    fontWeight: 500
+  },
+  formSuccess: {
+    backgroundColor: '#ecfdf3',
+    color: '#166534',
+    border: '1px solid #d1fae5'
+  },
+  formError: {
+    backgroundColor: '#fff1f2',
+    color: '#9f1239',
+    border: '1px solid #fee2e2'
   }
 };
 

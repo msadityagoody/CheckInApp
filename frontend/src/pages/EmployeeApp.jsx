@@ -29,6 +29,7 @@ function EmployeeApp() {
   const [status, setStatus] = useState('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [map, setMap] = useState(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
 
   const markerRef = useRef(null);
   const mapContainerRef = useRef(null);
@@ -70,6 +71,10 @@ function EmployeeApp() {
     if (token && mapContainerRef.current) {
       mapInstance = L.map(mapContainerRef.current, {
         zoomControl: false,
+        dragging: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        touchZoom: false,
         attributionControl: false
       }).setView([13.0536522, 80.1660282], 13);
       
@@ -86,12 +91,31 @@ function EmployeeApp() {
         }).addTo(mapInstance).bindPopup(loc.name);
       });
 
-      mapInstance.on('click', (e) => {
-        const { lat, lng } = e.latlng;
-        handleLocationSelect(lat, lng, mapInstance);
-      });
-
       setMap(mapInstance);
+
+      // Fetch real GPS location on mount
+      setGpsLoading(true);
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude } = pos.coords;
+            mapInstance.setView([latitude, longitude], 17);
+            handleLocationSelect(latitude, longitude, mapInstance);
+            setGpsLoading(false);
+          },
+          (err) => {
+            console.error('GPS Error:', err);
+            setErrorMessage('Location access denied. Please enable GPS.');
+            setStatus('error');
+            setGpsLoading(false);
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      } else {
+        setErrorMessage('Geolocation is not supported by your browser.');
+        setStatus('error');
+        setGpsLoading(false);
+      }
     }
 
     return () => {
@@ -172,11 +196,7 @@ function EmployeeApp() {
     if (markerRef.current) {
       markerRef.current.setLatLng([lat, lng]);
     } else {
-      markerRef.current = L.marker([lat, lng], { draggable: true }).addTo(currentMap);
-      markerRef.current.on('dragend', (e) => {
-        const newPos = e.target.getLatLng();
-        handleLocationSelect(newPos.lat, newPos.lng, currentMap);
-      });
+      markerRef.current = L.marker([lat, lng], { draggable: false }).addTo(currentMap);
     }
 
     try {
@@ -197,6 +217,7 @@ function EmployeeApp() {
     }
 
     setStatus('loading');
+    setGpsLoading(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
@@ -204,11 +225,14 @@ function EmployeeApp() {
           map.setView([latitude, longitude], 17);
           handleLocationSelect(latitude, longitude, map);
         }
+        setGpsLoading(false);
       },
       () => {
-        setErrorMessage('Location access denied');
+        setErrorMessage('Location access denied. Please enable GPS.');
         setStatus('error');
-      }
+        setGpsLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
@@ -345,12 +369,22 @@ function EmployeeApp() {
 
         <main style={styles.main}>
           <div style={styles.mapContainer}>
-            <div style={styles.mapHint}>Click map to set location</div>
+            {gpsLoading && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(255,255,255,0.7)', zIndex: 1000,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '14px', fontWeight: '500', color: '#185FA5'
+              }}>
+                Fetching your location...
+              </div>
+            )}
+            <div style={styles.mapHint}>GPS Tracking Active</div>
             <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }}></div>
           </div>
 
           <button onClick={detectLocation} style={styles.secondaryButton}>
-            Detect My Location
+            Refresh My Location
           </button>
 
           <div style={styles.statusStrip}>
